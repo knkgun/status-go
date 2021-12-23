@@ -28,6 +28,7 @@ import (
 	"github.com/status-im/status-go/multiaccounts"
 	"github.com/status-im/status-go/multiaccounts/accounts"
 	"github.com/status-im/status-go/node"
+	"github.com/status-im/status-go/nodecfg"
 	"github.com/status-im/status-go/params"
 	"github.com/status-im/status-go/rpc"
 	"github.com/status-im/status-go/services/personal"
@@ -645,8 +646,7 @@ func (b *GethStatusBackend) saveAccountsAndSettings(settings accounts.Settings, 
 func (b *GethStatusBackend) loadNodeConfig() (*params.NodeConfig, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	accountDB := accounts.NewDB(b.appDB)
-	conf, err := accountDB.GetNodeConfig()
+	conf, err := nodecfg.GetNodeConfig(b.appDB)
 	if err != nil {
 		return nil, err
 	}
@@ -670,11 +670,10 @@ func (b *GethStatusBackend) loadNodeConfig() (*params.NodeConfig, error) {
 	return conf, nil
 }
 
-func (b *GethStatusBackend) saveNodeConfig(nodeCfg *params.NodeConfig) error {
+func (b *GethStatusBackend) saveNodeConfig(n *params.NodeConfig) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	accountDB := accounts.NewDB(b.appDB)
-	err := accountDB.SaveSetting("node-config", *nodeCfg)
+	err := nodecfg.SaveNodeConfig(b.appDB, n)
 	if err != nil {
 		return err
 	}
