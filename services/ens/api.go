@@ -15,14 +15,21 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	ethTypes "github.com/ethereum/go-ethereum/core/types"
+	"github.com/status-im/status-go/account"
+	"github.com/status-im/status-go/eth-node/types"
+	"github.com/status-im/status-go/params"
 	"github.com/status-im/status-go/rpc"
+	"github.com/status-im/status-go/transactions"
 )
 
-func NewAPI(rpcClient *rpc.Client) *API {
+func NewAPI(rpcClient *rpc.Client, accountsManager *account.GethManager, config *params.NodeConfig) *API {
 	return &API{
 		contractMaker: &contractMaker{
 			rpcClient: rpcClient,
 		},
+		accountsManager: accountsManager,
+		config:          config,
 	}
 }
 
@@ -38,7 +45,9 @@ type publicKey struct {
 }
 
 type API struct {
-	contractMaker *contractMaker
+	contractMaker   *contractMaker
+	accountsManager *account.GethManager
+	config          *params.NodeConfig
 }
 
 func (api *API) Resolver(ctx context.Context, chainID uint64, username string) (*common.Address, error) {
@@ -205,7 +214,7 @@ func (api *API) Price(ctx context.Context, chainID uint64) (*big.Int, error) {
 
 // 	txOpts := &bind.TransactOpts{
 // 		From: common.HexToAddress(from),
-// 		Signer: func(addr common.Address, tx *types.Transaction) (*types.Transaction, error) {
+// 		Signer: func(addr common.Address, tx *ethTypes.Transaction) (*ethTypes.Transaction, error) {
 // 			// return types.SignTx(tx, types.NewLondonSigner(chainID), selectedAccount.AccountKey.PrivateKey)
 // 			return nil, nil
 // 		},
@@ -219,38 +228,41 @@ func (api *API) Price(ctx context.Context, chainID uint64) (*big.Int, error) {
 // 	return tx.Hash().String(), nil
 // }
 
-// func (api *API) Register(ctx context.Context, chainID uint64, from string, gasPrice *big.Int, gasLimit uint64, password string, username string, x [32]byte, y [32]byte) (string, error) {
-// 	err := validateENSUsername(username)
-// 	if err != nil {
-// 		return "", err
-// 	}
+func (api *API) getSigner(chainID uint64, from types.Address, password string) bind.SignerFn {
+	return func(addr common.Address, tx *ethTypes.Transaction) (*ethTypes.Transaction, error) {
+		selectedAccount, err := api.accountsManager.VerifyAccountPassword(api.config.KeyStoreDir, from.Hex(), password)
+		if err != nil {
+			return nil, err
+		}
+		s := ethTypes.NewLondonSigner(new(big.Int).SetUint64(chainID))
+		return ethTypes.SignTx(tx, s, selectedAccount.PrivateKey)
+	}
+}
 
-// 	registrar, err := api.contractMaker.newUsernameRegistrar(chainID)
-// 	if err != nil {
-// 		return "", err
-// 	}
+func (api *API) Register(ctx context.Context, chainID uint64, txArgs transactions.SendTxArgs, password string, username string, x [32]byte, y [32]byte) (string, error) {
+	err := validateENSUsername(username)
+	if err != nil {
+		return "", err
+	}
 
-// 	txOpts := &bind.TransactOpts{
-// 		From: common.HexToAddress(from),
-// 		Signer: func(addr common.Address, tx *types.Transaction) (*types.Transaction, error) {
-// 			// return types.SignTx(tx, types.NewLondonSigner(chainID), selectedAccount.AccountKey.PrivateKey)
-// 			return nil, nil
-// 		},
-// 		GasPrice: gasPrice,
-// 		GasLimit: gasLimit,
-// 	}
-// 	tx, err := registrar.Register(
-// 		txOpts,
-// 		nameHash(username),
-// 		common.HexToAddress(from),
-// 		x,
-// 		y,
-// 	)
-// 	if err != nil {
-// 		return "", err
-// 	}
-// 	return tx.Hash().String(), nil
-// }
+	registrar, err := api.contractMaker.newUsernameRegistrar(chainID)
+	if err != nil {
+		return "", err
+	}
+
+	txOpts := txArgs.ToTransactOpts(api.getSigner(chainID, txArgs.From, password))
+	tx, err := registrar.Register(
+		txOpts,
+		nameHash(username),
+		common.Address(txArgs.From),
+		x,
+		y,
+	)
+	if err != nil {
+		return "", err
+	}
+	return tx.Hash().String(), nil
+}
 
 func (api *API) ResourceURL(ctx context.Context, chainID uint64, username string) (*uri, error) {
 	scheme := "https"

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"math/big"
 
 	ethereum "github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 
@@ -76,6 +78,18 @@ func (args SendTxArgs) GetInput() types.HexBytes {
 	}
 
 	return args.Data
+}
+
+func (args SendTxArgs) ToTransactOpts(signerFn bind.SignerFn) *bind.TransactOpts {
+	return &bind.TransactOpts{
+		From:      common.Address(args.From),
+		Signer:    signerFn,
+		GasPrice:  (*big.Int)(args.GasPrice),
+		GasLimit:  uint64(*args.Gas),
+		GasFeeCap: (*big.Int)(args.MaxFeePerGas),
+		GasTipCap: (*big.Int)(args.MaxPriorityFeePerGas),
+		Nonce:     new(big.Int).SetUint64((uint64)(*args.Nonce)),
+	}
 }
 
 func isNilOrEmpty(bytes types.HexBytes) bool {
