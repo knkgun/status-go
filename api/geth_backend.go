@@ -682,9 +682,6 @@ func (b *GethStatusBackend) saveNodeConfig(nodeCfg *params.NodeConfig) error {
 }
 
 func (b *GethStatusBackend) GetNodeConfig() (*params.NodeConfig, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	if b.appDB == nil {
 		return nil, ErrDBNotAvailable
 	}
